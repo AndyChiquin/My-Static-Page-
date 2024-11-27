@@ -3,25 +3,42 @@ name: Deploy to EC2
 on:
   push:
     branches:
-      - main  # Puedes cambiar 'main' por la rama que prefieras para hacer el despliegue
+      - main  
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
+      # 1. Checkout el código del repositorio
       - name: Checkout code
         uses: actions/checkout@v2
 
+      # 2. Configurar SSH para conectar al servidor EC2
       - name: Set up SSH
         uses: webfactory/ssh-agent@v0.5.3
         with:
           ssh-private-key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
 
+      # 3. Conectar al servidor EC2 y desplegar el código
       - name: Deploy to EC2
         run: |
           ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_PUBLIC_IP }} << 'EOF'
+            # Navega al directorio del proyecto
             cd /var/www/html
-            git pull origin main  # Cambia 'main' por tu rama si es diferente
-            sudo systemctl restart apache2
+            
+            # Asegurarse de que el repositorio esté configurado correctamente
+            if [ ! -d ".git" ]; then
+              echo "Initializing Git repository in /var/www/html"
+              git init
+              git remote add origin https://github.com/AndyChiquin/My-Static-Page-.git
+              git fetch origin main
+              git reset --hard origin/main
+            fi
+            
+            # Actualizar el código desde la rama principal
+            git pull origin main || { echo "Git pull failed"; exit 1; }
+            
+            # Reiniciar Apache para aplicar los cambios
+            sudo systemctl restart apache2 || { echo "Failed to restart Apache"; exit 1; }
           EOF
